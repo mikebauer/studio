@@ -323,6 +323,12 @@ export function ThreeDeeRender(props: {
     }
   }, [config, renderer]);
 
+  // Hard reset when GL renderer needs to be re-initialized
+  useEffect(() => {
+    rendererRef.current?.resetWebGLRenderer();
+    renderRef.current.needsRender = true;
+  }, [config.cameraState.logarithmicDepth]);
+
   // Update the renderer's reference to `topics` when it changes
   useEffect(() => {
     if (renderer) {

@@ -195,6 +195,11 @@ export class CameraStateSettings extends SceneExtension implements ICameraHandle
             precision: PRECISION_DISTANCE,
             value: camera.far,
           },
+          logarithmicDepth: {
+                  label: "Logarithmic depth",
+                  input: "boolean",
+                  value: camera.logarithmicDepth,
+          },
         },
       },
     };
@@ -490,6 +495,7 @@ export class CameraStateSettings extends SceneExtension implements ICameraHandle
       fovy: config.cameraState.fovy,
       near: config.cameraState.near,
       far: config.cameraState.far,
+      logarithmicDepth: config.cameraState.logarithmicDepth,
     };
   }
 

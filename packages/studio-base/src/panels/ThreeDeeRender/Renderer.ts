@@ -158,7 +158,11 @@ Object.defineProperty(LabelMaterial.prototype, "fragmentShaderKey", {
 export class Renderer extends EventEmitter<RendererEvents> implements IRenderer {
   public readonly interfaceMode: InterfaceMode;
   #canvas: HTMLCanvasElement;
-  public readonly gl: THREE.WebGLRenderer;
+  public get gl(): THREE.WebGLRenderer {
+    return this._gl;
+  }
+  private _gl: THREE.WebGLRenderer;
+
   public maxLod = DetailLevel.High;
 
   public debugPicking: boolean;
@@ -275,29 +279,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     this.settings.setNodesForKey(RENDERER_ID, []);
     this.updateCustomLayersCount();
 
-    this.gl = new THREE.WebGLRenderer({
-      canvas,
-      alpha: true,
-      antialias: true,
-    });
-    if (!this.gl.capabilities.isWebGL2) {
-      throw new Error("WebGL2 is not supported");
-    }
-    this.gl.toneMapping = THREE.NoToneMapping;
-    this.gl.autoClear = false;
-    this.gl.info.autoReset = false;
-    this.gl.shadowMap.enabled = false;
-    this.gl.shadowMap.type = THREE.VSMShadowMap;
-    this.gl.sortObjects = true;
-    this.gl.setPixelRatio(window.devicePixelRatio);
-
-    let width = canvas.width;
-    let height = canvas.height;
-    if (canvas.parentElement) {
-      width = canvas.parentElement.clientWidth;
-      height = canvas.parentElement.clientHeight;
-      this.gl.setSize(width, height);
-    }
+    this._gl = this.resetWebGLRenderer();
 
     this.modelCache = new ModelCache({
       ignoreColladaUpAxis: config.scene.ignoreColladaUpAxis ?? false,
@@ -333,14 +315,14 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
       this.#clickHandler(cursorCoords);
     });
 
-    this.#picker = new Picker(this.gl, this.#scene);
+    this.#picker = new Picker(this._gl, this.#scene);
 
     this.#selectionBackdrop = new ScreenOverlay(this);
     this.#selectionBackdropScene = new THREE.Scene();
     this.#selectionBackdropScene.add(this.#selectionBackdrop);
 
-    const samples = msaaSamples(this.gl.capabilities);
-    const renderSize = this.gl.getDrawingBufferSize(tempVec2);
+    const samples = msaaSamples(this._gl.capabilities);
+    const renderSize = this._gl.getDrawingBufferSize(tempVec2);
     log.debug(`Initialized ${renderSize.width}x${renderSize.height} renderer (${samples}x MSAA)`);
 
     const { reserved } = args.sceneExtensionConfig;
@@ -398,6 +380,36 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     this.animationFrame();
   }
 
+  public resetWebGLRenderer(): THREE.WebGLRenderer {
+    console.log("Resetting!");
+    (this._gl as typeof this._gl | undefined)?.dispose(); // may be undefined during constructor
+    this._gl = new THREE.WebGLRenderer({
+      canvas: this.#canvas,
+      alpha: true,
+      antialias: true,
+      logarithmicDepthBuffer: this.config.cameraState.logarithmicDepth,
+    });
+    if (!this._gl.capabilities.isWebGL2) {
+      throw new Error("WebGL2 is not supported");
+    }
+    this._gl.toneMapping = THREE.NoToneMapping;
+    this._gl.autoClear = false;
+    this._gl.info.autoReset = false;
+    this._gl.shadowMap.enabled = false;
+    this._gl.shadowMap.type = THREE.VSMShadowMap;
+    this._gl.sortObjects = true;
+    this._gl.setPixelRatio(window.devicePixelRatio);
+
+    let width = this.#canvas.width;
+    let height = this.#canvas.height;
+    if (this.#canvas.parentElement) {
+      width = this.#canvas.parentElement.clientWidth;
+      height = this.#canvas.parentElement.clientHeight;
+      this._gl.setSize(width, height);
+    }
+    return this._gl;
+  }
+
   #onHUDItemsChange = () => {
     this.hudItems = this.hud.getHUDItems();
     this.emit("hudItemsChanged", this);
@@ -438,7 +450,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     this.#transformPool.clear();
     this.#picker.dispose();
     this.input.dispose();
-    this.gl.dispose();
+    this._gl.dispose();
   }
 
   public cameraSyncError(): undefined | string {
@@ -452,7 +464,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
   }
 
   public getPixelRatio(): number {
-    return this.gl.getPixelRatio();
+    return this._gl.getPixelRatio();
   }
 
   /**
@@ -863,14 +875,14 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     }
 
     if (colorScheme === "dark") {
-      this.gl.setClearColor(bgColor ?? DARK_BACKDROP);
+      this._gl.setClearColor(bgColor ?? DARK_BACKDROP);
       this.outlineMaterial.color.set(DARK_OUTLINE);
       this.outlineMaterial.needsUpdate = true;
       this.instancedOutlineMaterial.color.set(DARK_OUTLINE);
       this.instancedOutlineMaterial.needsUpdate = true;
       this.#selectionBackdrop.setColor(DARK_BACKDROP, 0.8);
     } else {
-      this.gl.setClearColor(bgColor ?? LIGHT_BACKDROP);
+      this._gl.setClearColor(bgColor ?? LIGHT_BACKDROP);
       this.outlineMaterial.color.set(LIGHT_OUTLINE);
       this.outlineMaterial.needsUpdate = true;
       this.instancedOutlineMaterial.color.set(LIGHT_OUTLINE);
@@ -1119,6 +1131,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     this.emit("transformTreeUpdated", this);
   }
 
+
   // Callback handlers
 
   public animationFrame = (): void => {
@@ -1157,7 +1170,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
     this.#updateFixedFrameId();
     this.#updateResolution();
 
-    this.gl.clear();
+    this._gl.clear();
     this.emit("startFrame", currentTime, this);
 
     const camera = this.cameraHandler.getActiveCamera();
@@ -1174,18 +1187,18 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
       sceneExtension.startFrame(currentTime, renderFrameId, fixedFrameId);
     }
 
-    this.gl.render(this.#scene, camera);
+    this._gl.render(this.#scene, camera);
 
     if (this.#selectedRenderable) {
-      this.gl.render(this.#selectionBackdropScene, camera);
-      this.gl.clearDepth();
+      this._gl.render(this.#selectionBackdropScene, camera);
+      this._gl.clearDepth();
       camera.layers.set(LAYER_SELECTED);
-      this.gl.render(this.#scene, camera);
+      this._gl.render(this.#scene, camera);
     }
 
     this.emit("endFrame", currentTime, this);
 
-    this.gl.info.reset();
+    this._gl.info.reset();
   };
 
   /** iterates through all subscription message queues, processes them, and calls their handler for each message in the frame */
@@ -1239,11 +1252,11 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
   }
 
   #resizeHandler = (size: THREE.Vector2): void => {
-    this.gl.setPixelRatio(window.devicePixelRatio);
-    this.gl.setSize(size.width, size.height);
+    this._gl.setPixelRatio(window.devicePixelRatio);
+    this._gl.setSize(size.width, size.height);
     this.cameraHandler.handleResize(size.width, size.height, window.devicePixelRatio);
 
-    const renderSize = this.gl.getDrawingBufferSize(tempVec2);
+    const renderSize = this._gl.getDrawingBufferSize(tempVec2);
     log.debug(`Resized renderer to ${renderSize.width}x${renderSize.height}`);
     this.animationFrame();
   };
@@ -1278,7 +1291,7 @@ export class Renderer extends EventEmitter<RendererEvents> implements IRenderer 
         break;
       }
       curSelection.renderable.visible = false;
-      this.gl.render(this.#scene, camera);
+      this._gl.render(this.#scene, camera);
     }
 
     // Put everything back to normal and render one last frame

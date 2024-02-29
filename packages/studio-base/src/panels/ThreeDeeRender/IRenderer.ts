@@ -369,6 +369,8 @@ export interface IRenderer extends EventEmitter<RendererEvents> {
 
   removeTransform(childFrameId: string, parentFrameId: string, stamp: bigint): void;
 
+  resetWebGLRenderer(): THREE.WebGLRenderer;
+
   // Callback handlers
   animationFrame: () => void;
   queueAnimationFrame: () => void;
@@ -389,4 +391,5 @@ export interface IRenderer extends EventEmitter<RendererEvents> {
   hudItems: HUDItem[];
 
   displayTemporaryError?: (message: string) => void;
+
 }
